@@ -2,7 +2,6 @@ name: Update UserAgent with Release Version
 
 on:
   push:
-    branches: [ develop ]
     tags:
       - 'v*'
       - '*.*.*'
@@ -20,20 +19,23 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
+      - name: Extract version and tag name
+        id: extract-version
+        run: |
+          # Get the full tag name that triggered this workflow
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+          
+          # Get the version (remove 'v' prefix if present)
+          VERSION=${TAG_NAME#v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Tag: $TAG_NAME"
+          echo "Version: $VERSION"
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.21'
-
-      - name: Extract version from latest tag
-        id: extract-version
-        run: |
-          # Get the most recent tag
-          VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")
-          # Remove 'v' prefix if present
-          VERSION=${VERSION#v}
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Extracted version from tag: $VERSION"
 
       - name: Update UserAgent
         run: |
@@ -59,28 +61,30 @@ jobs:
             echo "No changes detected"
           else
             echo "changes=true" >> $GITHUB_OUTPUT
-            echo "Changes detected"
+            echo "✅ Changes detected - UserAgent updated"
             echo "Files changed:"
             git diff --name-only
             echo "Diff content:"
             git diff
           fi
 
-      - name: Commit and push changes
+      - name: Commit changes and update tag
         if: steps.check-changes.outputs.changes == 'true'
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           
-          # Get the current branch name
-          BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD)
-          if [ "$BRANCH_NAME" = "HEAD" ]; then
-            # We're in detached HEAD state, get the branch from the PR
-            BRANCH_NAME=$(echo $GITHUB_HEAD_REF || echo "main")
-          fi
-          
+          # Make commit with UserAgent update
           git add internal/provider/provider.go
           git commit -m "Update UserAgent to version ${{ steps.extract-version.outputs.version }}"
           
-          # Push to the current branch
-          git push origin HEAD:$BRANCH_NAME
+          # Delete the tag locally
+          git tag -d ${{ steps.extract-version.outputs.tag_name }}
+          
+          # Recreate the tag pointing to the new commit
+          git tag ${{ steps.extract-version.outputs.tag_name }}
+          
+          # Force push the updated tag
+          git push origin ${{ steps.extract-version.outputs.tag_name }} --force
+          
+          echo "✅ Tag ${{ steps.extract-version.outputs.tag_name }} updated with UserAgent changes"
