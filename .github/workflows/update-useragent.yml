@@ -32,6 +32,12 @@ jobs:
           echo "Tag: $TAG_NAME"
           echo "Version: $VERSION"
 
+      - name: Switch to main branch
+        run: |
+          # Switch to main branch to be able to commit
+          git checkout main
+          git pull origin main
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -68,23 +74,29 @@ jobs:
             git diff
           fi
 
-      - name: Commit changes and update tag
+      - name: Commit changes to main and update tag
         if: steps.check-changes.outputs.changes == 'true'
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           
-          # Make commit with UserAgent update
+          # Make commit with UserAgent update on main
           git add internal/provider/provider.go
           git commit -m "Update UserAgent to version ${{ steps.extract-version.outputs.version }}"
           
-          # Delete the tag locally
-          git tag -d ${{ steps.extract-version.outputs.tag_name }}
+          # Push to main
+          git push origin main
           
-          # Recreate the tag pointing to the new commit
+          # Delete the remote tag first
+          git push origin :refs/tags/${{ steps.extract-version.outputs.tag_name }} || true
+          
+          # Delete the tag locally
+          git tag -d ${{ steps.extract-version.outputs.tag_name }} || true
+          
+          # Recreate the tag pointing to the new commit on main
           git tag ${{ steps.extract-version.outputs.tag_name }}
           
-          # Force push the updated tag
-          git push origin ${{ steps.extract-version.outputs.tag_name }} --force
+          # Push the updated tag
+          git push origin ${{ steps.extract-version.outputs.tag_name }}
           
-          echo "✅ Tag ${{ steps.extract-version.outputs.tag_name }} updated with UserAgent changes"
+          echo "✅ UserAgent updated in main and tag ${{ steps.extract-version.outputs.tag_name }} recreated"
