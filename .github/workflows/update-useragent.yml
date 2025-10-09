@@ -3,6 +3,9 @@ name: Update UserAgent with Release Version
 on:
   push:
     branches: [ develop ]
+    tags:
+      - 'v*'
+      - '*.*.*'
 
 permissions:
   contents: write
